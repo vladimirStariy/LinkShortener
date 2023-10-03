@@ -11,6 +11,8 @@ namespace LinkShortener.DataLayer
             Database.EnsureCreated();
         }
 
+        public DbSet<Link> Links { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<Link>(builder =>
