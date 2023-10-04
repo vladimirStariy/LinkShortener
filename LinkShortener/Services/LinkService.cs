@@ -3,6 +3,7 @@ using LinkShortener.DataLayer.Repositories;
 using LinkShortener.Middleware;
 using LinkShortener.Utilities;
 using LinkShortener.ViewModels;
+using System.IO;
 
 namespace LinkShortener.Services
 {
@@ -22,13 +23,60 @@ namespace LinkShortener.Services
                 var link = new Link()
                 {
                     Long_Link = model.Long_Link,
-                    CreatedAt = DateTime.Now
+                    CreatedAt = DateTime.Now,
+                    RedirectCount = 0
                 };
 
                 await _linkRepository.Create(link);
-
-                link.Short_Link = UrlShortener.ShortenUrl(link.Link_ID, link.Long_Link);
                 
+                try
+                {
+                   link.Short_Link = UrlShortener.ShortenUrl(link.Link_ID, link.Long_Link);
+                }
+                catch (Exception ex)
+                {
+                    await _linkRepository.Delete(link);
+                    return new BaseResponse<Link>()
+                    {
+                        StatusCode = StatusCode.InternalServerError,
+                        Description = $"Некоректная ссылка"
+                    };
+                }
+
+                await _linkRepository.Update(link);
+
+                return new BaseResponse<Link>()
+                {
+                    Result = link,
+                    Description = "Success",
+                    StatusCode = StatusCode.OK
+                };
+            }
+            catch (Exception ex)
+            {
+                return new BaseResponse<Link>()
+                {
+                    StatusCode = StatusCode.InternalServerError,
+                    Description = $"Внутренняя ошибка: {ex.Message}"
+                };
+            }
+        }
+
+        public async Task<IBaseResponce<Link>> Update(EditorLinkViewModel model)
+        {
+            try
+            {
+                var link = _linkRepository.Get().Where(x => x.Link_ID == model.id).FirstOrDefault();
+
+                if(!UrlShortener.ValidateUrl(model.Long_Link))
+                    return new BaseResponse<Link>()
+                    {
+                        StatusCode = StatusCode.InternalServerError,
+                        Description = $"Некорректная ссылка"
+                    };
+
+                link.Long_Link = model.Long_Link;
+
                 await _linkRepository.Update(link);
 
                 return new BaseResponse<Link>()
@@ -58,9 +106,11 @@ namespace LinkShortener.Services
                 {
                     var linkViewModel = new LinkViewModel()
                     {
+                        Link_ID = item.Link_ID,
                         Long_Link = item.Long_Link,
                         Short_Link = item.Short_Link,
-                        CreatedAt = item.CreatedAt
+                        CreatedAt = item.CreatedAt,
+                        RedirectCount = item.RedirectCount,
                     };
                     linksList.Add(linkViewModel);
                 }
@@ -82,15 +132,65 @@ namespace LinkShortener.Services
             }
         }
 
+        public async Task<IBaseResponce<EditorLinkViewModel>> GetLinkById(int id)
+        {
+            try
+            {
+                var link = _linkRepository.Get().Where(x => x.Link_ID == id).FirstOrDefault();
+                EditorLinkViewModel linkViewModel = new EditorLinkViewModel() { id = link.Link_ID, Long_Link = link.Long_Link };
+                
+                return new BaseResponse<EditorLinkViewModel>()
+                {
+                    Result = linkViewModel,
+                    Description = "Success",
+                    StatusCode = StatusCode.OK
+                };
+            }
+            catch (Exception ex)
+            {
+                return new BaseResponse<EditorLinkViewModel>()
+                {
+                    StatusCode = StatusCode.InternalServerError,
+                    Description = $"Внутренняя ошибка: {ex.Message}"
+                };
+            }
+        }
+
         public async Task<IBaseResponce<Link>> GetShortUrlByPath(string path)
         {
             try
             {
-                var shortLink = _linkRepository.Get().Where(x => x.Short_Link == path).FirstOrDefault();              
+                var shortLink = _linkRepository.Get().Where(x => x.Short_Link == path).FirstOrDefault();
+                shortLink.RedirectCount += 1;
+                await _linkRepository.Update(shortLink);
 
                 return new BaseResponse<Link> ()
                 {
                     Result = shortLink,
+                    Description = "Success",
+                    StatusCode = StatusCode.OK
+                };
+            }
+            catch (Exception ex)
+            {
+                return new BaseResponse<Link>()
+                {
+                    StatusCode = StatusCode.InternalServerError,
+                    Description = $"Внутренняя ошибка: {ex.Message}"
+                };
+            }
+        }
+
+        public async Task<IBaseResponce<Link>> Delete (int id)
+        {
+            try
+            {
+                var link = _linkRepository.Get().Where(x => x.Link_ID == id).FirstOrDefault();
+                await _linkRepository.Delete(link);
+
+                return new BaseResponse<Link>()
+                {
+                    Result = link,
                     Description = "Success",
                     StatusCode = StatusCode.OK
                 };

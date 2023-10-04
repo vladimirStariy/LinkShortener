@@ -35,4 +35,9 @@ app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Link}/{action=Index}/{id?}");
 
+app.MapControllerRoute(
+    name: "specific",
+    pattern: "{path}",
+    new { controller = "Link", action = "RedirectTo" });
+
 app.Run();
